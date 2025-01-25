@@ -368,6 +368,23 @@ class vcsite:
                 self.log.error(f"VM '{vm}' not found in vCenter.")
                 return {vm: "Not Found"}
 
+            # Split the ISO path into datastore name and file path
+            if '/' not in iso:
+                self.log.error("ISO path format is invalid. Expected 'datastore_name/folder/filename.iso'.")
+                return {"Error": "Invalid ISO path format"}
+            datastore_name, file_path = iso.split('/', 1)
+
+            # Find the datastore in vCenter
+            datastore = None
+            for ds in content.viewManager.CreateContainerView(content.rootFolder, [vim.Datastore], True).view:
+                if ds.name == datastore_name:
+                    datastore = ds
+                    break
+
+            if not datastore:
+                self.log.error(f"Datastore '{datastore_name}' not found in vCenter.")
+                return {"Error": f"Datastore '{datastore_name}' not found in vCenter."}
+
             # Check for an existing CD-ROM drive
             cdrom_device = None
             for device in vm_obj.config.hardware.device:
@@ -378,23 +395,6 @@ class vcsite:
             if not cdrom_device:
                 self.log.error(f"VM '{vm}' does not have a CD-ROM drive.")
                 return {vm: "No CD-ROM drive found"}
-
-            # Split the ISO path into datastore name and file path
-            if '/' not in iso:
-                self.log.error("ISO path format is invalid. Expected 'datastore_name/folder/filename.iso'.")
-                return {"Error": "Invalid ISO path format"}
-            datastore_name, file_path = iso.split('/', 1)
-
-            # Find the datastore
-            datastore = None
-            for ds in vm_obj.datastore:
-                if ds.name == datastore_name:
-                    datastore = ds
-                    break
-
-            if not datastore:
-                self.log.error(f"Datastore '{datastore_name}' not found for VM '{vm}'.")
-                return {"Error": f"Datastore '{datastore_name}' not found"}
 
             # Configure the CD-ROM to use the ISO file
             cdrom_device.backing = vim.vm.device.VirtualCdrom.IsoBackingInfo()
