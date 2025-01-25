@@ -91,6 +91,31 @@ class vcsite:
                     self.log.debug(f"{vm_obj.name} is not a VRA")
             raise ValueError("No VRA Found")
 
+    def get_vm_list(self):
+        """
+        Retrieve a list of all VMs in the vCenter Server.
+        Returns:
+            list: A list of VM names.
+        """
+        if self.__conn__ is None:
+            self.log.debug("Trying to get VM list without vCenter connection, attempting to connect.")
+            self.connect()
+
+        try:
+            content = self.__conn__.RetrieveContent()
+            root_folder = content.rootFolder
+            view_manager = content.viewManager
+            vm_view = view_manager.CreateContainerView(root_folder, [vim.VirtualMachine], True)
+
+            vm_list = [vm_obj.name for vm_obj in vm_view.view]
+            vm_view.Destroy()
+            self.log.info(f"Retrieved {len(vm_list)} virtual machines from vCenter.")
+            return vm_list
+        except Exception as e:
+            self.log.error(f"Error while retrieving VM list: {e}")
+            return []
+ 
+
     def get_write_iops(self, vm):
         try:
             content = self.__conn__.RetrieveContent()
