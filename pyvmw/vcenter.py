@@ -33,6 +33,14 @@ class vcsite:
             self.log = logger
 
     def connect(self):
+        """
+        Establish a connection to the vCenter server.
+
+        This method creates a connection to the vCenter server using the provided
+        credentials and SSL context.
+
+        Logs the connection status and retrieves the vCenter version upon success.
+        """
         self.log.info(f"Log Level set to {self.LOGLEVEL}")
         if self.__conn__ is None:
             context = ssl.create_default_context()
@@ -54,6 +62,12 @@ class vcsite:
                 self.log.error(f"Error connecting to vCenter Server: {e}")
 
     def version(self):
+        """
+        Retrieve the version of the connected vCenter server.
+
+        Returns:
+            str: The version of the vCenter server, or None if not connected.
+        """
         return self.version
 
     def datastore_list(self):
@@ -180,40 +194,53 @@ class vcsite:
         return {"Error": f"ISO '{iso_name}' not found in any datastore."}
 
     def get_cpu_mem_used(self, vra=None):
-            if vra == None:
-                self.log.debug("Get_cpu_mem_used called with no vm name...returning no data")
-                return
-            if self.__conn__ == None:
-                self.log.debug("Trying to get VRA stats without vCenter connection, trying to connect")
-                self.connect()
+        """
+        Retrieve the CPU and memory usage of a specified VM.
 
-            # get the root folder of the vCenter Server
-            try:
-                content = self.__conn__.RetrieveContent()
-                root_folder = content.rootFolder
-            except:
-                self.log.debug("Could not get content from vCenter when trying to get VRA stats")
+        Args:
+            vra (str): Name of the VM to retrieve the stats for.
 
-            # create a view for all VMs on the vCenter Server
-            view_manager = content.viewManager
-            vm_view = view_manager.CreateContainerView(root_folder, [vim.VirtualMachine], True)
+        Returns:
+            list: A list containing the CPU usage (MHz) and memory usage (MB) of the VM,
+                  or None if the VM is not found.
+        
+        Raises:
+            ValueError: If the VM is not found in the vCenter.
+        """
+        if vra == None:
+            self.log.debug("Get_cpu_mem_used called with no vm name...returning no data")
+            return
+        if self.__conn__ == None:
+            self.log.debug("Trying to get VRA stats without vCenter connection, trying to connect")
+            self.connect()
 
-            vm = None
-            for vm_obj in vm_view.view:
-                if str(vm_obj.name) == str(vra):
-                    vm = vm_obj
-                if vm is not None:
-                    self.log.debug(f"Found VRA VM in vCenter with name {vm.name}")
-                    # get the CPU usage and memory usage for the VM
-                    cpu_usage_mhz = vm.summary.quickStats.overallCpuUsage
-                    memory_usage_mb = vm.summary.quickStats.guestMemoryUsage
+        # get the root folder of the vCenter Server
+        try:
+            content = self.__conn__.RetrieveContent()
+            root_folder = content.rootFolder
+        except:
+            self.log.debug("Could not get content from vCenter when trying to get VRA stats")
 
-                    # print the CPU and memory usage for the VM
-                    self.log.info(f"VM {vm.name} has CPU usage of {cpu_usage_mhz} MHz and memory usage of {memory_usage_mb} MB")
-                    return [cpu_usage_mhz, memory_usage_mb]
-                else:
-                    self.log.debug(f"{vm_obj.name} is not a VRA")
-            raise ValueError("No VRA Found")
+        # create a view for all VMs on the vCenter Server
+        view_manager = content.viewManager
+        vm_view = view_manager.CreateContainerView(root_folder, [vim.VirtualMachine], True)
+
+        vm = None
+        for vm_obj in vm_view.view:
+            if str(vm_obj.name) == str(vra):
+                vm = vm_obj
+            if vm is not None:
+                self.log.debug(f"Found VRA VM in vCenter with name {vm.name}")
+                # get the CPU usage and memory usage for the VM
+                cpu_usage_mhz = vm.summary.quickStats.overallCpuUsage
+                memory_usage_mb = vm.summary.quickStats.guestMemoryUsage
+
+                # print the CPU and memory usage for the VM
+                self.log.info(f"VM {vm.name} has CPU usage of {cpu_usage_mhz} MHz and memory usage of {memory_usage_mb} MB")
+                return [cpu_usage_mhz, memory_usage_mb]
+            else:
+                self.log.debug(f"{vm_obj.name} is not a VRA")
+        raise ValueError("No VRA Found")
 
     def get_vm_list(self):
         """
@@ -713,6 +740,15 @@ class vcsite:
             return {}
 
     def get_write_iops(self, vm=None):
+        """
+        Retrieve the average write IOPS for a VM over the last 60 seconds.
+
+        Args:
+            vm (str): Name of the VM to retrieve the write IOPS for.
+
+        Returns:
+            float: The average write IOPS for the VM, or None if no data is found.
+        """
         try:
             content = self.__conn__.RetrieveContent()
         except:
@@ -764,6 +800,15 @@ class vcsite:
             return None
 
     def get_average_write_latency(self, vm=None):
+        """
+        Retrieve the average write latency for a VM over the last 60 seconds.
+
+        Args:
+            vm (str): Name of the VM to retrieve the write latency for.
+
+        Returns:
+            float: The average write latency for the VM in milliseconds, or None if no data is found.
+        """
         try:
             content = self.__conn__.RetrieveContent()
         except:
@@ -817,6 +862,11 @@ class vcsite:
         return None
 
     def disconnect(self):
+        """
+        Disconnect from the vCenter server.
+
+        This method closes the connection to the vCenter server and resets the internal state.
+        """
         if self.__conn__ == None:
             self.log.debug(f"vCenter disconnect requested, but not currently connected.")
             return
