@@ -115,7 +115,51 @@ class vcsite:
         except Exception as e:
             self.log.error(f"Error while retrieving VM list: {e}")
             return []
- 
+
+def vm_has_cdrom_drive(self, vm=None):
+    """
+    Check if the specified VM has a CD-ROM drive in its VMX configuration.
+    
+    Args:
+        vm (str): Name of the VM to check.
+    
+    Returns:
+        dict: A dictionary with the VM name as the key and a boolean indicating if it has a CD-ROM drive.
+    """
+    if not vm:
+        self.log.error("VM name is required to check for a CD-ROM drive.")
+        return {"Error": "VM name is required."}
+
+    if self.__conn__ is None:
+        self.log.debug("Trying to check for CD-ROM drive without vCenter connection, attempting to connect.")
+        self.connect()
+
+    try:
+        content = self.__conn__.RetrieveContent()
+        vm_obj = None
+        for obj in content.viewManager.CreateContainerView(content.rootFolder, [vim.VirtualMachine], True).view:
+            if obj.name == vm:
+                vm_obj = obj
+                break
+
+        if not vm_obj:
+            self.log.error(f"VM '{vm}' not found in vCenter.")
+            return {vm: "Not Found"}
+
+        # Check for a CD-ROM device
+        for device in vm_obj.config.hardware.device:
+            if isinstance(device, vim.vm.device.VirtualCdrom):
+                self.log.info(f"VM '{vm}' has a CD-ROM drive configured.")
+                return {vm: True}
+
+        self.log.info(f"VM '{vm}' does not have a CD-ROM drive configured.")
+        return {vm: False}
+
+    except Exception as e:
+        self.log.error(f"Error checking for CD-ROM drive on VM '{vm}': {e}")
+        return {"Error": str(e)}
+
+
     def vm_poweroff(self, vm=None):
         """
         Power off the specified VM.
