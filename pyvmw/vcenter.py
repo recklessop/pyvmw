@@ -467,6 +467,55 @@ class vcsite:
             self.log.error(f"Error checking for CD-ROM drive on VM '{vm}': {e}")
             return {"Error": str(e)}
 
+    def vm_get_mac_address(self, vm):
+        """
+        Retrieve the MAC address of a VM. If there are multiple NICs, return a dictionary
+        with the adapter name and the MAC address for each NIC.
+
+        Args:
+            vm (str): Name of the VM.
+
+        Returns:
+            dict: A dictionary where keys are adapter names and values are MAC addresses,
+                or an error message if the VM is not found or has no NICs.
+        """
+        if not vm:
+            self.log.error("VM name is required to retrieve MAC address.")
+            return {"Error": "VM name is required."}
+
+        if self.__conn__ is None:
+            self.log.debug("Trying to retrieve MAC address without vCenter connection, attempting to connect.")
+            self.connect()
+
+        try:
+            content = self.__conn__.RetrieveContent()
+            vm_obj = None
+            for obj in content.viewManager.CreateContainerView(content.rootFolder, [vim.VirtualMachine], True).view:
+                if obj.name == vm:
+                    vm_obj = obj
+                    break
+
+            if not vm_obj:
+                self.log.error(f"VM '{vm}' not found in vCenter.")
+                return {"Error": f"VM '{vm}' not found."}
+
+            mac_addresses = {}
+            for device in vm_obj.config.hardware.device:
+                if isinstance(device, vim.vm.device.VirtualEthernetCard):
+                    adapter_name = device.deviceInfo.label  # e.g., "Network adapter 1"
+                    mac_address = device.macAddress
+                    mac_addresses[adapter_name] = mac_address
+
+            if not mac_addresses:
+                self.log.warning(f"VM '{vm}' has no network adapters.")
+                return {"Error": "No network adapters found on the VM."}
+
+            return mac_addresses
+
+        except Exception as e:
+            self.log.error(f"Error retrieving MAC address for VM '{vm}': {e}")
+            return {"Error": str(e)}
+
     def vm_poweroff(self, vm=None):
         """
         Power off the specified VM.
