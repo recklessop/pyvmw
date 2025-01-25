@@ -1,5 +1,6 @@
 # Class for holding variables related to a site.
 from pyVim.connect import SmartConnect, Disconnect
+from pyVim.task import WaitForTask
 from pyVmomi import vim, vmodl
 import ssl
 import datetime
@@ -151,7 +152,7 @@ class vcsite:
 
             task = vm_obj.PowerOffVM_Task()
             self.log.info(f"Initiating power-off for VM '{vm}'.")
-            task.WaitForTask()
+            WaitForTask(task)
             self.log.info(f"VM '{vm}' has been powered off.")
             return self.get_vm_power_state(vm=vm)
 
@@ -195,14 +196,14 @@ class vcsite:
 
             task = vm_obj.PowerOnVM_Task()
             self.log.info(f"Initiating power-on for VM '{vm}'.")
-            task.WaitForTask()
+            WaitForTask(task)
             self.log.info(f"VM '{vm}' has been powered on.")
             return self.get_vm_power_state(vm=vm)
 
         except Exception as e:
             self.log.error(f"Error powering on VM '{vm}': {e}")
             return {"Error": str(e)}
-
+        
     def get_vm_power_state(self, vm=None):
         """
         Retrieve the power state of a specific VM or all VMs in the vCenter.
