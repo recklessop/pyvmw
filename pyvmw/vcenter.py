@@ -61,6 +61,29 @@ class vcsite:
             except Exception as e:
                 self.log.error(f"Error connecting to vCenter Server: {e}")
 
+    def is_authenticated(self) -> bool:
+        """
+        Check if the vcsite instance is authenticated and connected to vCenter.
+
+        Returns:
+            bool: True if authenticated, False otherwise.
+        """
+        if self.__conn__ is None:
+            return False
+
+        try:
+            # Perform a simple operation to confirm the connection is valid
+            content = self.__conn__.RetrieveContent()
+            if content and content.about:
+                self.log.debug("vCenter connection is authenticated.")
+                return True
+            else:
+                self.log.warning("vCenter connection is not authenticated.")
+                return False
+        except Exception as e:
+            self.log.error(f"Error while checking vCenter authentication: {e}")
+            return False
+
     def version(self):
         """
         Retrieve the version of the connected vCenter server.
