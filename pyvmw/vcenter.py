@@ -56,6 +56,67 @@ class vcsite:
     def version(self):
         return self.version
 
+    def find_iso(self, datastore_name, iso_name):
+        """
+        Search a datastore for an ISO file and return its path.
+
+        Args:
+            datastore_name (str): Name of the datastore to search.
+            iso_name (str): Name of the ISO file to find.
+
+        Returns:
+            str: Full path to the ISO file in the format 'datastore_name/folder/filename.iso',
+                or an error message if not found.
+        """
+        if not datastore_name or not iso_name:
+            self.log.error("Both datastore name and ISO file name are required.")
+            return {"Error": "Datastore name and ISO file name are required."}
+
+        if self.__conn__ is None:
+            self.log.debug("Trying to search datastore without vCenter connection, attempting to connect.")
+            self.connect()
+
+        try:
+            content = self.__conn__.RetrieveContent()
+
+            # Find the datastore
+            datastore = None
+            for ds in content.viewManager.CreateContainerView(content.rootFolder, [vim.Datastore], True).view:
+                if ds.name == datastore_name:
+                    datastore = ds
+                    break
+
+            if not datastore:
+                self.log.error(f"Datastore '{datastore_name}' not found.")
+                return {"Error": f"Datastore '{datastore_name}' not found."}
+
+            # Browse the datastore for the ISO
+            browser = datastore.browser
+            task = browser.SearchDatastore_Task(
+                datastorePath=f"[{datastore_name}]",
+                searchSpec=vim.HostDatastoreBrowser.SearchSpec(
+                    matchPattern=[iso_name],
+                    details=vim.FileQueryFlags(fileSize=True, fileType=True, modification=True)
+                )
+            )
+            self.log.info(f"Searching for ISO '{iso_name}' in datastore '{datastore_name}'.")
+            WaitForTask(task)
+            search_results = task.info.result
+
+            if search_results and search_results.file:
+                for file in search_results.file:
+                    if isinstance(file, vim.HostDatastoreBrowser.IsoImageFile):
+                        full_path = f"{datastore_name}/{file.path}"
+                        self.log.info(f"ISO '{iso_name}' found in datastore '{datastore_name}': {full_path}")
+                        return full_path
+
+            self.log.warning(f"ISO '{iso_name}' not found in datastore '{datastore_name}'.")
+            return {"Error": f"ISO '{iso_name}' not found in datastore '{datastore_name}'."}
+
+        except Exception as e:
+            self.log.error(f"Error searching for ISO '{iso_name}' in datastore '{datastore_name}': {e}")
+            return {"Error": str(e)}
+
     def get_cpu_mem_used(self, vra=None):
             if vra == None:
                 self.log.debug("Get_cpu_mem_used called with no vm name...returning no data")
@@ -118,11 +179,11 @@ class vcsite:
 
     def vm_add_cdrom_drive(self, vm):
         """
-        Add a CD-ROM drive to the specified VM.
-        
+        Add a CD-ROM drive to the specified VM with a client device backing.
+
         Args:
             vm (str): Name of the VM to add the CD-ROM drive to.
-        
+
         Returns:
             dict: A dictionary with the VM name as the key and a success message or error.
         """
@@ -155,11 +216,11 @@ class vcsite:
             cdrom.key = -1  # Unique key, negative value signifies it's a new device
             cdrom.controllerKey = 200  # Default IDE controller (usually 200 or 201 for most VMs)
             cdrom.unitNumber = 0  # First device on the controller
-            cdrom.backing = vim.vm.device.VirtualCdrom.AtapiBackingInfo()
+            cdrom.backing = vim.vm.device.VirtualCdrom.RemoteAtapiBackingInfo()  # Client device backing
             cdrom.connectable = vim.vm.device.VirtualDevice.ConnectInfo(
-                startConnected=True,
+                startConnected=False,  # The CD-ROM drive starts disconnected
                 allowGuestControl=True,
-                connected=True
+                connected=False
             )
 
             # Create a device change spec to add the CD-ROM
@@ -173,7 +234,7 @@ class vcsite:
 
             # Reconfigure the VM to add the CD-ROM drive
             task = vm_obj.ReconfigVM_Task(spec=spec)
-            self.log.info(f"Adding CD-ROM drive to VM '{vm}'.")
+            self.log.info(f"Adding CD-ROM drive to VM '{vm}' with client device backing.")
             WaitForTask(task)
             self.log.info(f"Successfully added CD-ROM drive to VM '{vm}'.")
             return {vm: "CD-ROM drive added successfully"}
@@ -618,3 +679,4 @@ class vcsite:
         self.__conn__ = None
         self.version = None
         self.log.debug(f"Disconnected from vCenter")
+
