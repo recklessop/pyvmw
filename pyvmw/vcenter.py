@@ -55,7 +55,7 @@ class vcsite:
     def version(self):
         return self.version
 
-    def get_cpu_mem_used(self, vra):
+    def get_cpu_mem_used(self, vra=None):
             if vra == None:
                 self.log.debug("Get_cpu_mem_used called with no vm name...returning no data")
                 return
@@ -115,8 +115,48 @@ class vcsite:
             self.log.error(f"Error while retrieving VM list: {e}")
             return []
  
+    def get_vm_power_state(self, vm=None):
+        """
+        Retrieve the power state of a specific VM or all VMs in the vCenter.
+        
+        Args:
+            vm (str): Name of the VM to get the power state for. If None, return all VMs and their power states.
+        
+        Returns:
+            str or dict: The power state of the specified VM (if provided) or a dictionary of all VMs and their power states.
+        """
+        if self.__conn__ is None:
+            self.log.debug("Trying to get VM power state without vCenter connection, attempting to connect.")
+            self.connect()
 
-    def get_write_iops(self, vm):
+        try:
+            content = self.__conn__.RetrieveContent()
+            root_folder = content.rootFolder
+            view_manager = content.viewManager
+            vm_view = view_manager.CreateContainerView(root_folder, [vim.VirtualMachine], True)
+
+            if vm:
+                # Get the power state for a specific VM
+                for vm_obj in vm_view.view:
+                    if vm_obj.name == vm:
+                        vm_view.Destroy()
+                        power_state = vm_obj.runtime.powerState
+                        self.log.info(f"Power state of VM '{vm}': {power_state}")
+                        return str(power_state)
+                vm_view.Destroy()
+                self.log.warning(f"VM '{vm}' not found in vCenter.")
+                return f"VM '{vm}' not found."
+            else:
+                # Get the power states of all VMs
+                vm_power_states = {vm_obj.name: str(vm_obj.runtime.powerState) for vm_obj in vm_view.view}
+                vm_view.Destroy()
+                self.log.info(f"Retrieved power states for {len(vm_power_states)} VMs.")
+                return vm_power_states
+        except Exception as e:
+            self.log.error(f"Error while retrieving VM power state: {e}")
+            return {}
+
+    def get_write_iops(self, vm=None):
         try:
             content = self.__conn__.RetrieveContent()
         except:
@@ -167,7 +207,7 @@ class vcsite:
         else:
             return None
 
-    def get_average_write_latency(self, vm):
+    def get_average_write_latency(self, vm=None):
         try:
             content = self.__conn__.RetrieveContent()
         except:
