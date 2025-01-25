@@ -239,6 +239,38 @@ class vcsite:
             self.log.error(f"Error while retrieving VM list: {e}")
             return []
 
+    def list_vm_datastores(self, vm):
+        """
+        List all datastores accessible by the specified VM.
+
+        Args:
+            vm (str): Name of the VM.
+
+        Returns:
+            list: A list of datastore names accessible by the VM, or an error message.
+        """
+        if not vm:
+            return {"Error": "VM name is required."}
+
+        if self.__conn__ is None:
+            self.connect()
+
+        try:
+            content = self.__conn__.RetrieveContent()
+            vm_obj = None
+            for obj in content.viewManager.CreateContainerView(content.rootFolder, [vim.VirtualMachine], True).view:
+                if obj.name == vm:
+                    vm_obj = obj
+                    break
+
+            if not vm_obj:
+                return {"Error": f"VM '{vm}' not found."}
+
+            datastores = [ds.name for ds in vm_obj.datastore]
+            return datastores
+        except Exception as e:
+            return {"Error": str(e)}
+
     def vm_add_cdrom_drive(self, vm):
         """
         Add a CD-ROM drive to the specified VM with a client device backing.
@@ -741,35 +773,3 @@ class vcsite:
         self.__conn__ = None
         self.version = None
         self.log.debug(f"Disconnected from vCenter")
-
-    def list_vm_datastores(self, vm):
-    """
-    List all datastores accessible by the specified VM.
-
-    Args:
-        vm (str): Name of the VM.
-
-    Returns:
-        list: A list of datastore names accessible by the VM, or an error message.
-    """
-    if not vm:
-        return {"Error": "VM name is required."}
-
-    if self.__conn__ is None:
-        self.connect()
-
-    try:
-        content = self.__conn__.RetrieveContent()
-        vm_obj = None
-        for obj in content.viewManager.CreateContainerView(content.rootFolder, [vim.VirtualMachine], True).view:
-            if obj.name == vm:
-                vm_obj = obj
-                break
-
-        if not vm_obj:
-            return {"Error": f"VM '{vm}' not found."}
-
-        datastores = [ds.name for ds in vm_obj.datastore]
-        return datastores
-    except Exception as e:
-        return {"Error": str(e)}
