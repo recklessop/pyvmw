@@ -557,7 +557,7 @@ class vcsite:
 
     def vm_set_bios_boot_cdrom(self, vm):
         """
-        Set a VM to use BIOS boot mode and make the CD-ROM drive the first boot device.
+        Set the VM to use BIOS boot mode and make the CD-ROM drive the first boot device.
 
         Args:
             vm (str): Name of the VM.
@@ -566,11 +566,11 @@ class vcsite:
             dict: A dictionary with the VM name as the key and a success message or error.
         """
         if not vm:
-            self.log.error("VM name is required to set BIOS boot and CD-ROM as the first boot device.")
+            self.log.error("VM name is required to set BIOS boot order.")
             return {"Error": "VM name is required."}
 
         if self.__conn__ is None:
-            self.log.debug("Trying to set BIOS boot mode without vCenter connection, attempting to connect.")
+            self.log.debug("Trying to set BIOS boot order without vCenter connection, attempting to connect.")
             self.connect()
 
         try:
@@ -583,7 +583,7 @@ class vcsite:
 
             if not vm_obj:
                 self.log.error(f"VM '{vm}' not found in vCenter.")
-                return {vm: "Not Found"}
+                return {"Error": f"VM '{vm}' not found."}
 
             # Check for an existing CD-ROM drive
             cdrom_device = None
@@ -596,10 +596,13 @@ class vcsite:
                 self.log.error(f"VM '{vm}' does not have a CD-ROM drive.")
                 return {vm: "No CD-ROM drive found"}
 
-            # Configure BIOS boot options
+            # Set boot options
             boot_options = vim.vm.BootOptions()
-            boot_options.bootOrder = [cdrom_device]
-            boot_options.efiSecureBootEnabled = False  # Ensure BIOS mode (disable EFI secure boot)
+            boot_options.efiSecureBootEnabled = False  # Ensure BIOS boot mode (disable EFI secure boot)
+
+            # Configure CD-ROM as the first boot device
+            bootable_cdrom = vim.vm.BootOptions.BootableCdromDevice()
+            boot_options.bootOrder = [bootable_cdrom]
 
             # Create a VM config spec
             spec = vim.vm.ConfigSpec()
@@ -609,11 +612,11 @@ class vcsite:
             task = vm_obj.ReconfigVM_Task(spec=spec)
             self.log.info(f"Setting BIOS boot mode and CD-ROM as the first boot device for VM '{vm}'.")
             WaitForTask(task)
-            self.log.info(f"Successfully configured BIOS boot and CD-ROM as the first boot device for VM '{vm}'.")
+            self.log.info(f"Successfully set BIOS boot mode and CD-ROM as the first boot device for VM '{vm}'.")
             return {vm: "BIOS boot mode set with CD-ROM as the first boot device"}
 
         except Exception as e:
-            self.log.error(f"Error setting BIOS boot mode for VM '{vm}': {e}")
+            self.log.error(f"Error setting BIOS boot order for VM '{vm}': {e}")
             return {"Error": str(e)}
         
     def get_vm_power_state(self, vm=None):
