@@ -144,6 +144,41 @@ class vcsite:
             self.log.error(f"Error searching for ISO '{iso_name}' in datastore '{datastore_name}': {e}")
             return {"Error": str(e)}
 
+    def find_iso_in_all_datastores(self, iso_name):
+        """
+        Search all datastores for a given ISO file and return its path as soon as it is found.
+
+        Args:
+            iso_name (str): Name of the ISO file to find.
+
+        Returns:
+            str: Full path to the ISO file in the format 'datastore_name/folder/filename.iso',
+                or an error message if the ISO is not found in any datastore.
+        """
+        if not iso_name:
+            self.log.error("ISO file name is required.")
+            return {"Error": "ISO file name is required."}
+
+        # Get the list of datastores
+        datastores = self.datastore_list()
+
+        if isinstance(datastores, dict) and "Error" in datastores:
+            return datastores  # Return error if datastore_list failed
+
+        for datastore_name in datastores:
+            self.log.info(f"Searching for ISO '{iso_name}' in datastore '{datastore_name}'...")
+            result = self.find_iso(datastore_name=datastore_name, iso_name=iso_name)
+
+            if isinstance(result, str):  # If an ISO path is returned
+                self.log.info(f"ISO '{iso_name}' found in datastore '{datastore_name}': {result}")
+                return result
+
+            # If result is an error, continue searching other datastores
+            self.log.warning(f"ISO '{iso_name}' not found in datastore '{datastore_name}'.")
+
+        self.log.error(f"ISO '{iso_name}' not found in any datastore.")
+        return {"Error": f"ISO '{iso_name}' not found in any datastore."}
+
     def get_cpu_mem_used(self, vra=None):
             if vra == None:
                 self.log.debug("Get_cpu_mem_used called with no vm name...returning no data")
