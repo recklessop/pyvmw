@@ -116,6 +116,159 @@ class vcsite:
             self.log.error(f"Error while retrieving VM list: {e}")
             return []
 
+    def vm_add_cdrom_drive(self, vm):
+        """
+        Add a CD-ROM drive to the specified VM.
+        
+        Args:
+            vm (str): Name of the VM to add the CD-ROM drive to.
+        
+        Returns:
+            dict: A dictionary with the VM name as the key and a success message or error.
+        """
+        if not vm:
+            self.log.error("VM name is required to add a CD-ROM drive.")
+            return {"Error": "VM name is required."}
+
+        if self.__conn__ is None:
+            self.log.debug("Trying to add CD-ROM drive without vCenter connection, attempting to connect.")
+            self.connect()
+
+        try:
+            content = self.__conn__.RetrieveContent()
+            vm_obj = None
+            for obj in content.viewManager.CreateContainerView(content.rootFolder, [vim.VirtualMachine], True).view:
+                if obj.name == vm:
+                    vm_obj = obj
+                    break
+
+            if not vm_obj:
+                self.log.error(f"VM '{vm}' not found in vCenter.")
+                return {vm: "Not Found"}
+
+            # Create a specification for adding a CD-ROM drive
+            spec = vim.vm.ConfigSpec()
+            device_changes = []
+
+            # Define a new CD-ROM drive
+            cdrom = vim.vm.device.VirtualCdrom()
+            cdrom.key = -1  # Unique key, negative value signifies it's a new device
+            cdrom.controllerKey = 200  # Default IDE controller (usually 200 or 201 for most VMs)
+            cdrom.unitNumber = 0  # First device on the controller
+            cdrom.backing = vim.vm.device.VirtualCdrom.AtapiBackingInfo()
+            cdrom.connectable = vim.vm.device.VirtualDevice.ConnectInfo(
+                startConnected=True,
+                allowGuestControl=True,
+                connected=True
+            )
+
+            # Create a device change spec to add the CD-ROM
+            device_spec = vim.vm.device.VirtualDeviceSpec()
+            device_spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.add
+            device_spec.device = cdrom
+            device_changes.append(device_spec)
+
+            # Add the device changes to the VM config spec
+            spec.deviceChange = device_changes
+
+            # Reconfigure the VM to add the CD-ROM drive
+            task = vm_obj.ReconfigVM_Task(spec=spec)
+            self.log.info(f"Adding CD-ROM drive to VM '{vm}'.")
+            WaitForTask(task)
+            self.log.info(f"Successfully added CD-ROM drive to VM '{vm}'.")
+            return {vm: "CD-ROM drive added successfully"}
+
+        except Exception as e:
+            self.log.error(f"Error adding CD-ROM drive to VM '{vm}': {e}")
+            return {"Error": str(e)}
+
+    def vm_cdrom_load_iso(self, vm, iso):
+        """
+        Load an ISO file into the CD-ROM drive of a VM.
+
+        Args:
+            vm (str): Name of the VM.
+            iso (str): Path to the ISO file in the format 'datastore_name/folder/filename.iso'.
+
+        Returns:
+            dict: A dictionary with the VM name as the key and a success message or error.
+        """
+        if not vm or not iso:
+            self.log.error("Both VM name and ISO file path are required to load an ISO.")
+            return {"Error": "VM name and ISO file path are required."}
+
+        if self.__conn__ is None:
+            self.log.debug("Trying to load ISO without vCenter connection, attempting to connect.")
+            self.connect()
+
+        try:
+            content = self.__conn__.RetrieveContent()
+            vm_obj = None
+            for obj in content.viewManager.CreateContainerView(content.rootFolder, [vim.VirtualMachine], True).view:
+                if obj.name == vm:
+                    vm_obj = obj
+                    break
+
+            if not vm_obj:
+                self.log.error(f"VM '{vm}' not found in vCenter.")
+                return {vm: "Not Found"}
+
+            # Check for an existing CD-ROM drive
+            cdrom_device = None
+            for device in vm_obj.config.hardware.device:
+                if isinstance(device, vim.vm.device.VirtualCdrom):
+                    cdrom_device = device
+                    break
+
+            if not cdrom_device:
+                self.log.error(f"VM '{vm}' does not have a CD-ROM drive.")
+                return {vm: "No CD-ROM drive found"}
+
+            # Split the ISO path into datastore name and file path
+            if '/' not in iso:
+                self.log.error("ISO path format is invalid. Expected 'datastore_name/folder/filename.iso'.")
+                return {"Error": "Invalid ISO path format"}
+            datastore_name, file_path = iso.split('/', 1)
+
+            # Find the datastore
+            datastore = None
+            for ds in vm_obj.datastore:
+                if ds.name == datastore_name:
+                    datastore = ds
+                    break
+
+            if not datastore:
+                self.log.error(f"Datastore '{datastore_name}' not found for VM '{vm}'.")
+                return {"Error": f"Datastore '{datastore_name}' not found"}
+
+            # Configure the CD-ROM to use the ISO file
+            cdrom_device.backing = vim.vm.device.VirtualCdrom.IsoBackingInfo()
+            cdrom_device.backing.fileName = f"[{datastore_name}] {file_path}"
+            cdrom_device.connectable = vim.vm.device.VirtualDevice.ConnectInfo(
+                startConnected=True,
+                allowGuestControl=True,
+                connected=True
+            )
+
+            # Create a device change spec
+            device_spec = vim.vm.device.VirtualDeviceSpec()
+            device_spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.edit
+            device_spec.device = cdrom_device
+
+            # Apply the device change
+            spec = vim.vm.ConfigSpec()
+            spec.deviceChange = [device_spec]
+
+            task = vm_obj.ReconfigVM_Task(spec=spec)
+            self.log.info(f"Loading ISO '{iso}' into CD-ROM drive of VM '{vm}'.")
+            WaitForTask(task)
+            self.log.info(f"Successfully loaded ISO '{iso}' into CD-ROM drive of VM '{vm}'.")
+            return {vm: f"ISO '{iso}' loaded successfully"}
+
+        except Exception as e:
+            self.log.error(f"Error loading ISO '{iso}' into CD-ROM drive of VM '{vm}': {e}")
+            return {"Error": str(e)}
+
     def vm_has_cdrom_drive(self, vm=None):
         """
         Check if the specified VM has a CD-ROM drive in its VMX configuration.
@@ -158,7 +311,6 @@ class vcsite:
         except Exception as e:
             self.log.error(f"Error checking for CD-ROM drive on VM '{vm}': {e}")
             return {"Error": str(e)}
-
 
     def vm_poweroff(self, vm=None):
         """
@@ -246,6 +398,67 @@ class vcsite:
 
         except Exception as e:
             self.log.error(f"Error powering on VM '{vm}': {e}")
+            return {"Error": str(e)}
+
+    def vm_set_bios_boot_cdrom(self, vm):
+        """
+        Set a VM to use BIOS boot mode and make the CD-ROM drive the first boot device.
+
+        Args:
+            vm (str): Name of the VM.
+
+        Returns:
+            dict: A dictionary with the VM name as the key and a success message or error.
+        """
+        if not vm:
+            self.log.error("VM name is required to set BIOS boot and CD-ROM as the first boot device.")
+            return {"Error": "VM name is required."}
+
+        if self.__conn__ is None:
+            self.log.debug("Trying to set BIOS boot mode without vCenter connection, attempting to connect.")
+            self.connect()
+
+        try:
+            content = self.__conn__.RetrieveContent()
+            vm_obj = None
+            for obj in content.viewManager.CreateContainerView(content.rootFolder, [vim.VirtualMachine], True).view:
+                if obj.name == vm:
+                    vm_obj = obj
+                    break
+
+            if not vm_obj:
+                self.log.error(f"VM '{vm}' not found in vCenter.")
+                return {vm: "Not Found"}
+
+            # Check for an existing CD-ROM drive
+            cdrom_device = None
+            for device in vm_obj.config.hardware.device:
+                if isinstance(device, vim.vm.device.VirtualCdrom):
+                    cdrom_device = device
+                    break
+
+            if not cdrom_device:
+                self.log.error(f"VM '{vm}' does not have a CD-ROM drive.")
+                return {vm: "No CD-ROM drive found"}
+
+            # Configure BIOS boot options
+            boot_options = vim.vm.BootOptions()
+            boot_options.bootOrder = [cdrom_device]
+            boot_options.efiSecureBootEnabled = False  # Ensure BIOS mode (disable EFI secure boot)
+
+            # Create a VM config spec
+            spec = vim.vm.ConfigSpec()
+            spec.bootOptions = boot_options
+
+            # Reconfigure the VM
+            task = vm_obj.ReconfigVM_Task(spec=spec)
+            self.log.info(f"Setting BIOS boot mode and CD-ROM as the first boot device for VM '{vm}'.")
+            WaitForTask(task)
+            self.log.info(f"Successfully configured BIOS boot and CD-ROM as the first boot device for VM '{vm}'.")
+            return {vm: "BIOS boot mode set with CD-ROM as the first boot device"}
+
+        except Exception as e:
+            self.log.error(f"Error setting BIOS boot mode for VM '{vm}': {e}")
             return {"Error": str(e)}
         
     def get_vm_power_state(self, vm=None):
