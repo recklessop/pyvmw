@@ -123,7 +123,7 @@ class vcsite:
             vm (str): Name of the VM to get the power state for. If None, return all VMs and their power states.
         
         Returns:
-            str or dict: The power state of the specified VM (if provided) or a dictionary of all VMs and their power states.
+            dict: A dictionary with VM names as keys and their power states as values.
         """
         if self.__conn__ is None:
             self.log.debug("Trying to get VM power state without vCenter connection, attempting to connect.")
@@ -135,23 +135,26 @@ class vcsite:
             view_manager = content.viewManager
             vm_view = view_manager.CreateContainerView(root_folder, [vim.VirtualMachine], True)
 
+            vm_power_states = {}
+
+            for vm_obj in vm_view.view:
+                vm_power_states[vm_obj.name] = str(vm_obj.runtime.powerState)
+
+            vm_view.Destroy()
+
             if vm:
-                # Get the power state for a specific VM
-                for vm_obj in vm_view.view:
-                    if vm_obj.name == vm:
-                        vm_view.Destroy()
-                        power_state = vm_obj.runtime.powerState
-                        self.log.info(f"Power state of VM '{vm}': {power_state}")
-                        return str(power_state)
-                vm_view.Destroy()
-                self.log.warning(f"VM '{vm}' not found in vCenter.")
-                return f"VM '{vm}' not found."
+                # Return power state for the specified VM if it exists
+                if vm in vm_power_states:
+                    self.log.info(f"Power state of VM '{vm}': {vm_power_states[vm]}")
+                    return {vm: vm_power_states[vm]}
+                else:
+                    self.log.warning(f"VM '{vm}' not found in vCenter.")
+                    return {vm: "Not Found"}
             else:
-                # Get the power states of all VMs
-                vm_power_states = {vm_obj.name: str(vm_obj.runtime.powerState) for vm_obj in vm_view.view}
-                vm_view.Destroy()
+                # Return all VM power states
                 self.log.info(f"Retrieved power states for {len(vm_power_states)} VMs.")
                 return vm_power_states
+
         except Exception as e:
             self.log.error(f"Error while retrieving VM power state: {e}")
             return {}
