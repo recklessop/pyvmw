@@ -56,6 +56,32 @@ class vcsite:
     def version(self):
         return self.version
 
+    def datastore_list(self):
+        """
+        Retrieve a list of all datastores in the vCenter.
+
+        Returns:
+            list: A list of datastore names, or an error message if something goes wrong.
+        """
+        if self.__conn__ is None:
+            self.log.debug("Trying to retrieve datastore list without vCenter connection, attempting to connect.")
+            self.connect()
+
+        try:
+            content = self.__conn__.RetrieveContent()
+            datastores = []
+
+            # Get all datastores
+            for ds in content.viewManager.CreateContainerView(content.rootFolder, [vim.Datastore], True).view:
+                datastores.append(ds.name)
+
+            self.log.info(f"Retrieved {len(datastores)} datastores.")
+            return datastores
+
+        except Exception as e:
+            self.log.error(f"Error retrieving datastore list: {e}")
+            return {"Error": str(e)}
+
     def find_iso(self, datastore_name, iso_name):
         """
         Search a datastore for an ISO file and return its path.
@@ -105,7 +131,8 @@ class vcsite:
 
             if search_results and search_results.file:
                 for file in search_results.file:
-                    if isinstance(file, vim.HostDatastoreBrowser.IsoImageFile):
+                    # Match the file name to the iso_name
+                    if file.path.endswith(iso_name):
                         full_path = f"{datastore_name}/{file.path}"
                         self.log.info(f"ISO '{iso_name}' found in datastore '{datastore_name}': {full_path}")
                         return full_path
