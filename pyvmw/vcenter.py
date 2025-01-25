@@ -115,6 +115,94 @@ class vcsite:
             self.log.error(f"Error while retrieving VM list: {e}")
             return []
  
+    def vm_poweroff(self, vm=None):
+        """
+        Power off the specified VM.
+        
+        Args:
+            vm (str): Name of the VM to power off.
+        
+        Returns:
+            dict: The updated power state of the VM as a dictionary.
+        """
+        if not vm:
+            self.log.error("VM name is required to power off a VM.")
+            return {"Error": "VM name is required."}
+
+        if self.__conn__ is None:
+            self.log.debug("Trying to power off VM without vCenter connection, attempting to connect.")
+            self.connect()
+
+        try:
+            content = self.__conn__.RetrieveContent()
+            vm_obj = None
+            for obj in content.viewManager.CreateContainerView(content.rootFolder, [vim.VirtualMachine], True).view:
+                if obj.name == vm:
+                    vm_obj = obj
+                    break
+
+            if not vm_obj:
+                self.log.error(f"VM '{vm}' not found in vCenter.")
+                return {vm: "Not Found"}
+
+            if vm_obj.runtime.powerState == "poweredOff":
+                self.log.info(f"VM '{vm}' is already powered off.")
+                return {vm: "poweredOff"}
+
+            task = vm_obj.PowerOffVM_Task()
+            self.log.info(f"Initiating power-off for VM '{vm}'.")
+            task.WaitForTask()
+            self.log.info(f"VM '{vm}' has been powered off.")
+            return self.get_vm_power_state(vm=vm)
+
+        except Exception as e:
+            self.log.error(f"Error powering off VM '{vm}': {e}")
+            return {"Error": str(e)}
+
+    def vm_poweron(self, vm=None):
+        """
+        Power on the specified VM.
+        
+        Args:
+            vm (str): Name of the VM to power on.
+        
+        Returns:
+            dict: The updated power state of the VM as a dictionary.
+        """
+        if not vm:
+            self.log.error("VM name is required to power on a VM.")
+            return {"Error": "VM name is required."}
+
+        if self.__conn__ is None:
+            self.log.debug("Trying to power on VM without vCenter connection, attempting to connect.")
+            self.connect()
+
+        try:
+            content = self.__conn__.RetrieveContent()
+            vm_obj = None
+            for obj in content.viewManager.CreateContainerView(content.rootFolder, [vim.VirtualMachine], True).view:
+                if obj.name == vm:
+                    vm_obj = obj
+                    break
+
+            if not vm_obj:
+                self.log.error(f"VM '{vm}' not found in vCenter.")
+                return {vm: "Not Found"}
+
+            if vm_obj.runtime.powerState == "poweredOn":
+                self.log.info(f"VM '{vm}' is already powered on.")
+                return {vm: "poweredOn"}
+
+            task = vm_obj.PowerOnVM_Task()
+            self.log.info(f"Initiating power-on for VM '{vm}'.")
+            task.WaitForTask()
+            self.log.info(f"VM '{vm}' has been powered on.")
+            return self.get_vm_power_state(vm=vm)
+
+        except Exception as e:
+            self.log.error(f"Error powering on VM '{vm}': {e}")
+            return {"Error": str(e)}
+
     def get_vm_power_state(self, vm=None):
         """
         Retrieve the power state of a specific VM or all VMs in the vCenter.
