@@ -137,7 +137,7 @@ class vcsite:
             user_directory = self.__conn__.content.userDirectory
 
             # Check if the user already exists
-            existing_users = user_directory.RetrieveUserGroups("*", None)  # Use wildcard to retrieve all users
+            existing_users = user_directory.RetrieveUserGroups(searchStr="*", None)  # Use wildcard to retrieve all users
             if any(user.principal == zUsername for user in existing_users):
                 self.log.warning(f"User {zUsername} already exists")
                 return {"Warning": f"User {zUsername} already exists"}
