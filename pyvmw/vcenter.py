@@ -93,6 +93,194 @@ class vcsite:
         """
         return self.version
 
+    def create_zerto_svc_account(self, zUsername, zPassword, role_name="Zerto SVC Account Role", minimum=True):
+        """
+        Create a User account which has the permissions needed for Zerto to operate.
+
+        Args:
+            zUsername (str): The full username (including domain) for the new Zerto service account.
+            zPassword (str): The password for the new Zerto service account.
+            role_name (str, optional): The name of the role to assign to the new user. Defaults to "Zerto SVC Account Role".
+            minimum (bool, optional): Whether to use minimum permissions. Defaults to True.
+
+        Returns:
+            dict: A dictionary containing the status of the operation and any error messages.
+
+        Raises:
+            RuntimeError: If not connected or authenticated with vCenter.
+        """
+        if not self.is_authenticated():
+            self.log.error("Not connected or authenticated with vCenter. Call connect() method first and check credentials.")
+            return {"Error": "Not connected or authenticated with vCenter. Call connect() method first and check credentials."}
+
+        if not zUsername or not zPassword:
+            self.log.error("Both zUsername and zPassword are required.")
+            return {"Error": "zUsername and zPassword are required"}
+
+        try:
+            # Verify that the role exists
+            auth_manager = self.__conn__.content.authorizationManager
+            zerto_role = None
+            for role in auth_manager.roleList:
+                if role.name == role_name:
+                    zerto_role = role
+                    break
+
+            if zerto_role is None:
+                self.log.error(f"Role '{role_name}' not found. Please create it first.")
+                return {"Error": f"Role '{role_name}' not found. Please create it first."}
+
+            # Split the username into domain and actual username
+            domain, username = zUsername.split('\\', 1)
+            
+            # Get the user directory
+            user_directory = self.__conn__.content.userDirectory
+
+            # Check if the user already exists
+            existing_users = user_directory.RetrieveUserGroups("*", None)  # Use wildcard to retrieve all users
+            if any(user.principal == zUsername for user in existing_users):
+                self.log.warning(f"User {zUsername} already exists")
+                return {"Warning": f"User {zUsername} already exists"}
+
+            # Create the new user
+            user_spec = vim.host.LocalAccountManager.AccountSpecification()
+            user_spec.id = username
+            user_spec.password = zPassword
+            user_spec.description = "Zerto Service Account"
+
+            user_directory.CreateUser(user_spec)
+            self.log.info(f"Created new user: {zUsername}")
+
+            # Add the user to the specified role
+            auth_manager.SetEntityPermissions(
+                entity=self.__conn__.content.rootFolder,
+                permission=[vim.AuthorizationManager.Permission(
+                    principal=zUsername,
+                    group=False,
+                    roleId=zerto_role.roleId,
+                    propagate=True
+                )]
+            )
+            self.log.info(f"Added user {zUsername} to role {role_name}")
+
+            return {"Status": "Success", "Message": f"Created Zerto service account {zUsername} and added to role {role_name}"}
+
+        except ValueError:
+            self.log.error("Invalid username format. Please use the format 'domain\\username'.")
+            return {"Error": "Invalid username format. Please use the format 'domain\\username'."}
+        except Exception as e:
+            self.log.error(f"Error creating Zerto service account: {e}")
+            return {"Error": f"Error creating Zerto service account: {e}"}
+
+    def create_zerto_svc_role(self, role_name="Zerto SVC Account Role"):
+        """
+        Create a vSphere role with permissions required for Zerto.
+
+        Args:
+            si (vim.ServiceInstance): The vCenter service instance.
+            role_name (str, optional): The name of the role to create. Defaults to "Zerto Service Account".
+
+        Returns:
+            vim.AuthorizationManager.Role: The created role object.
+        """
+        if not self.is_authenticated():
+            self.log.error("Not connected or authenticated with vCenter. Call connect() method first and check credentials.")
+            raise RuntimeError("Not connected or authenticated with vCenter. Call connect() method first and check credentials.")
+        
+        # Get the authorization manager
+        auth_manager = self.__conn__.content.authorizationManager
+
+        # Define the privileges
+        privileges = [
+            "Alarm.Create",
+            "Alarm.Delete",
+            "Authorization.ModifyPermissions",
+            "Cryptographer.Access",
+            "Datastore.AllocateSpace",
+            "Datastore.Browse",
+            "Datastore.Config",
+            "Datastore.DeleteFile",
+            "Datastore.FileManagement",
+            "Datastore.UpdateVirtualMachineFiles",
+            "Extension.Register",
+            "Extension.Unregister",
+            "Folder.Create",
+            "Global.CancelTask",
+            "Global.Diagnostics",
+            "Global.DisableMethods",
+            "Global.EnableMethods",
+            "Global.LogEvent",
+            "Host.Config.AdvancedConfig",
+            "Host.Config.AutoStart",
+            "Host.Config.NetService",
+            "Host.Config.Patch",
+            "Host.Config.Settings",
+            "Host.Inventory.EditCluster",
+            "InventoryService.Tagging.AttachTag",
+            "InventoryService.Tagging.CreateCategory",
+            "InventoryService.Tagging.CreateTag",
+            "InventoryService.Tagging.DeleteCategory",
+            "InventoryService.Tagging.DeleteTag",
+            "InventoryService.Tagging.EditCategory",
+            "InventoryService.Tagging.EditTag",
+            "InventoryService.Tagging.ModifyUsedByForCategory",
+            "InventoryService.Tagging.ModifyUsedByForTag",
+            "InventoryService.Tagging.ObjectAttachable",
+            "Network.Assign",
+            "Resource.AssignVAppToPool",
+            "Resource.AssignVMToPool",
+            "Resource.ColdMigrate",
+            "Resource.HotMigrate",
+            "Sessions.ValidateSession",
+            "StoragePod.Config",
+            "System.Anonymous",
+            "System.Read",
+            "System.View",
+            "Task.Create",
+            "Task.Update",
+            "VApp.ApplicationConfig",
+            "VApp.AssignResourcePool",
+            "VApp.AssignVM",
+            "VApp.Create",
+            "VApp.Delete",
+            "VApp.Import",
+            "VApp.PowerOff",
+            "VApp.PowerOn",
+            "VirtualMachine.Config.AddExistingDisk",
+            "VirtualMachine.Config.AddNewDisk",
+            "VirtualMachine.Config.AddRemoveDevice",
+            "VirtualMachine.Config.AdvancedConfig",
+            "VirtualMachine.Config.CPUCount",
+            "VirtualMachine.Config.DiskExtend",
+            "VirtualMachine.Config.EditDevice",
+            "VirtualMachine.Config.ManagedBy",
+            "VirtualMachine.Config.Memory",
+            "VirtualMachine.Config.RawDevice",
+            "VirtualMachine.Config.RemoveDisk",
+            "VirtualMachine.Config.Resource",
+            "VirtualMachine.Config.Settings",
+            "VirtualMachine.Config.SwapPlacement",
+            "VirtualMachine.Config.UpgradeVirtualHardware",
+            "VirtualMachine.GuestOperations.Execute",
+            "VirtualMachine.GuestOperations.Modify",
+            "VirtualMachine.GuestOperations.ModifyAliases",
+            "VirtualMachine.GuestOperations.Query",
+            "VirtualMachine.GuestOperations.QueryAliases",
+            "VirtualMachine.Interact.PowerOff",
+            "VirtualMachine.Interact.PowerOn",
+            "VirtualMachine.Inventory.Create",
+            "VirtualMachine.Inventory.CreateFromExisting",
+            "VirtualMachine.Inventory.Delete",
+            "VirtualMachine.Inventory.Register",
+            "VirtualMachine.Inventory.Unregister",
+            "VirtualMachine.State.RemoveSnapshot"
+        ]
+
+        # Create the role
+        role = auth_manager.AddRole(role_name, privileges)
+
+        return role
+
     def datastore_list(self):
         """
         Retrieve a list of all datastores in the vCenter.
