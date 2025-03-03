@@ -2,6 +2,7 @@
 from pyVim.connect import SmartConnect, Disconnect
 from pyVim.task import WaitForTask
 from pyVmomi import vim, vmodl
+import os
 import ssl
 import datetime
 import logging
@@ -21,16 +22,35 @@ class vcsite:
         self.log = None
 
         if logger is None:
-            #set log line format including container_id
-            container_id = str(socket.gethostname())
-            log_formatter = logging.Formatter("%(asctime)s;%(levelname)s;%(threadName)s;%(message)s", "%Y-%m-%d %H:%M:%S")
-            log_handler = RotatingFileHandler(filename=f"./logs/Log-{container_id}.log", maxBytes=1024*1024*100, backupCount=5)
-            log_handler.setFormatter(log_formatter)
-            self.log = logging.getLogger("vCenter Module")
-            self.log.setLevel(self.LOGLEVEL)
-            self.log.addHandler(log_handler)
+            self.setup_logging()
         else:
             self.log = logger
+
+    def setup_logging(self) -> None:
+        """
+        Set up logging for the ZVM site object.
+        Creates the logs directory if it doesn't exist, then creates a rotating file handler and sets up log formatting.
+        """
+        container_id = str(socket.gethostname())
+        log_formatter = logging.Formatter("%(asctime)s;%(levelname)s;%(threadName)s;%(message)s", "%Y-%m-%d %H:%M:%S")
+
+        # Define the logs directory
+        logs_dir = "./logs"
+
+        # Check if the logs directory exists, if not, create it
+        if not os.path.exists(logs_dir):
+            os.makedirs(logs_dir)
+
+        # Construct the full path for the log file
+        log_file_path = os.path.join(logs_dir, f"Log-{container_id}.log")
+
+        # Create the rotating file handler with the full path
+        log_handler = RotatingFileHandler(filename=log_file_path, maxBytes=1024*1024*100, backupCount=5)
+        log_handler.setFormatter(log_formatter)
+
+        self.log = logging.getLogger("vCenter Module")
+        self.log.setLevel(self.LOGLEVEL)
+        self.log.addHandler(log_handler)
 
     def connect(self):
         """
@@ -137,7 +157,7 @@ class vcsite:
             user_directory = self.__conn__.content.userDirectory
 
             # Check if the user already exists
-            existing_users = user_directory.RetrieveUserGroups(searchStr="*", None)  # Use wildcard to retrieve all users
+            existing_users = user_directory.RetrieveUserGroups("*", None)  # Use wildcard to retrieve all users
             if any(user.principal == zUsername for user in existing_users):
                 self.log.warning(f"User {zUsername} already exists")
                 return {"Warning": f"User {zUsername} already exists"}

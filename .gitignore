@@ -1,3 +1,7 @@
 .DS_Store
 .env/*
-logs/
+.venv/*
+logs/*
+pyvmw/__pycache__/vcenter.cpython-311.pyc
+pyvmw/__pycache__
+*.pyc
