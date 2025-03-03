@@ -3,6 +3,6 @@
 .venv/*
 logs/*
 pyvmw/__pycache__/vcenter.cpython-311.pyc
+pyvmw/__pycache__/__init__.cpython-311.pyc
 pyvmw/__pycache__
 *.pyc
-pyvmw/__pycache__/__init__.cpython-311.pyc
